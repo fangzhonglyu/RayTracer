@@ -7,6 +7,17 @@ def load_texture(filename):
   return np.asarray(Image.open(filename))
 
 
+def load_box_textures(filename):
+  """load six textures for a box"""
+  suffix = ['_right', '_left', '_top', '_bottom', '_front', '_back']
+  return [load_texture(filename + s + '.jpg') for s in suffix]
+
+
+def load_box_textures_simple(updown, sides):
+  """load six textures for a box"""
+  return [load_texture(sides), load_texture(sides), load_texture(updown), load_texture(updown), load_texture(sides), load_texture(sides)]
+
+
 def vec(list):
   """Handy shorthand to make a single-precision float array."""
   return np.array(list, dtype=np.float32)

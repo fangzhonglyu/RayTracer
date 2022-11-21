@@ -117,16 +117,16 @@ class Sphere:
       #     nvec = -nvec
       mat = self.material
       if self.material.texture is not None:
-        mat = Material(self.spherical_texture(nvec), self.material.k_s,
-                       self.material.p, self.material.k_m, self.material.k_a, self.material.texture)
+        mat = Material(self.spherical_texture(nvec), k_s=self.material.k_s,
+                       p=self.material.p, k_m=self.material.k_m, k_a=self.material.k_a, texture=self.material.texture)
       return Hit(t0, hit_point, nvec, mat)
     elif t1 > ray.start and t1 < ray.end:
       hit_point = ray.origin + t1 * d
       nvec = (hit_point - self.center) / self.radius
       mat = self.material
       if self.material.texture is not None:
-        mat = Material(self.spherical_texture(nvec), self.material.k_s,
-                       self.material.p, self.material.k_m, self.material.k_a, self.material.texture)
+        mat = Material(self.spherical_texture(nvec), k_s=self.material.k_s,
+                       p=self.material.p, k_m=self.material.k_m, k_a=self.material.k_a, texture=self.material.texture)
       # if np.dot(nvec, d) > 0:
       #     nvec = -nvec
       return Hit(t1, hit_point, nvec, mat)
@@ -203,49 +203,52 @@ class Cube:
 
     hit_point = ray.origin + tmin * ray.direction
     kd = np.zeros(3).astype(np.float32)
-    u, v = 0, 0
+    i, u, v = 0, 0, 0
     nvec = np.array([0, 0, 0])
     if abs(hit_point[0] - (self.center[0] - self.size/2)) < 0.0001:
       nvec = np.array([-1, 0, 0])
+      v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
       u = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      i = 0
     elif abs(hit_point[0] - (self.center[0] + self.size/2)) < 0.0001:
       nvec = np.array([1, 0, 0])
-      u = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      v = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      u = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+      i = 1
     elif abs(hit_point[1] - (self.center[1] - self.size/2)) < 0.0001:
       nvec = np.array([0, -1, 0])
       u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
+      v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+      i = 2
     elif abs(hit_point[1] - (self.center[1] + self.size/2)) < 0.0001:
       nvec = np.array([0, 1, 0])
       u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
+      v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+      i = 3
     elif abs(hit_point[2] - (self.center[2] - self.size/2)) < 0.0001:
       nvec = np.array([0, 0, -1])
       u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
-
+      v = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      i = 4
     elif abs(hit_point[2] - (self.center[2] + self.size/2)) < 0.0001:
       nvec = np.array([0, 0, 1])
       u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
+      v = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      i = 5
 
-    v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+    if self.material.texture is not None:
+      u, v = int(
+        u*self.material.texture[0].shape[1]), int(v*self.material.texture[0].shape[0])
+      # clamp u,v
+      u = np.clip(u, 0, self.material.texture[0].shape[1]-1)
+      v = np.clip(v, 0, self.material.texture[0].shape[0]-1)
+      kd = self.material.texture[i][v, u]/255
+    else:
+      kd = self.material.k_d
 
-    mat = self.material
-    # if self.material.texture is not None:
-    #  mat = Material(self.cube_texture(nvec), self.material.k_s,
-    #                 self.material.p, self.material.k_m, self.material.k_a, self.material.texture)
+    mat = Material(kd, k_s=self.material.k_s,
+                   p=self.material.p, k_m=self.material.k_m, k_a=self.material.k_a, texture=self.material.texture)
     return Hit(tmin, hit_point, nvec, mat)
-
-  def cube_texture(self, hit_point):
-    """Computes the cube texture coordinates for a given normal.
-
-    Parameters:
-      index : the index of the texture in the array
-    Return:
-      (u, v) : (float, float) -- the texture coordinates
-    """
-    n = hit_point
-    u = 0.5 - np.arctan2(n[0], n[2]) / (2 * np.pi)
-    u, v = int(
-      u*self.material.texture[index].shape[1]), int(v*self.material.texture[index].shape[0])
-    return self.material.texture[index, v, u]/255
 
 
 class Triangle:
@@ -494,6 +497,7 @@ def render_image(camera, scene, lights, nx, ny):
   offset_x2 = offset_x / 2
   offset_y2 = offset_y / 2
   num_pixel = nx * ny
+
   for i in range(nx):
     for j in range(ny):
       # ray = camera.generate_ray([i / nx + offset_x, j / ny + offset_y])
