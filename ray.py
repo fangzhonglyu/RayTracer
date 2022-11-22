@@ -36,7 +36,7 @@ class Ray:
 
 class Material:
 
-  def __init__(self, k_d, k_s=0., p=20., k_m=0., k_a=None, texture=None):
+  def __init__(self, k_d, k_s=0., p=20., k_m=0., k_a=None, texture=None, normal_map=None):
     """Create a new material with the given parameters.
 
     Parameters:
@@ -53,6 +53,7 @@ class Material:
     self.k_m = k_m
     self.k_a = k_a if k_a is not None else k_d
     self.texture = texture
+    self.normal_map = normal_map
 
 
 class Hit:
@@ -153,88 +154,76 @@ class Cube:
     self.center = center
     self.size = size
     self.material = material
+    self.basis = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    self.surfl = self.center - self.size/2
+    self.surfr = self.center + self.size/2
 
   def intersect(self, ray):
-    """Computes the intersection between a ray and this triangle, if it exists.
+    """Computes the intersection between a ray and this cube, if it exists.
 
     Parameters:
-      ray : Ray -- the ray to intersect with the triangle
+      ray : Ray -- the ray to intersect with the cube
     Return:
       Hit -- the hit data
     """
-    tmin = (self.center[0] - self.size/2 - ray.origin[0]) / ray.direction[0]
-    tmax = (self.center[0] + self.size/2 - ray.origin[0]) / ray.direction[0]
 
-    if tmin > tmax:
-      tmin, tmax = tmax, tmin
+    tmin = (self.surfl-ray.origin)/ray.direction
+    tmax = (self.surfr-ray.origin)/ray.direction
 
-    tymin = (self.center[1] - self.size/2 - ray.origin[1]) / ray.direction[1]
-    tymax = (self.center[1] + self.size/2 - ray.origin[1]) / ray.direction[1]
+    tmin2, tmax2 = np.minimum(tmin, tmax), np.maximum(tmin, tmax)
 
-    if tymin > tymax:
-      tymin, tymax = tymax, tymin
+    t0 = np.max(tmin2)
+    t1 = np.min(tmax2)
 
-    if (tmin > tymax) or (tymin > tmax):
+    if t0 > t1:
       return no_hit
 
-    if tymin > tmin:
-      tmin = tymin
-
-    if tymax < tmax:
-      tmax = tymax
-
-    tzmin = (self.center[2] - self.size/2 - ray.origin[2]) / ray.direction[2]
-    tzmax = (self.center[2] + self.size/2 - ray.origin[2]) / ray.direction[2]
-
-    if tzmin > tzmax:
-      tzmin, tzmax = tzmax, tzmin
-
-    if (tmin > tzmax) or (tzmin > tmax):
+    if t0 > ray.start and t0 < ray.end:
+      hit_point = ray.origin + t0 * ray.direction
+    elif t1 > ray.start and t1 < ray.end:
+      hit_point = ray.origin + t1 * ray.direction
+    else:
       return no_hit
 
-    if tzmin > tmin:
-      tmin = tzmin
-
-    if tzmax < tmax:
-      tmax = tzmax
-
-    if tmin < ray.start or tmin > ray.end:
-      return no_hit
-
-    hit_point = ray.origin + tmin * ray.direction
-    kd = np.zeros(3).astype(np.float32)
-    i, u, v = 0, 0, 0
     nvec = np.array([0, 0, 0])
-    if abs(hit_point[0] - (self.center[0] - self.size/2)) < 0.0001:
-      nvec = np.array([-1, 0, 0])
-      v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
-      u = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+    hit_off = np.abs(hit_point - self.center)
+    nvec[np.argmax(hit_off)] = np.sign(hit_point[np.argmax(hit_off)] -
+                                       self.center[np.argmax(hit_off)])
+
+    temp = (hit_point - self.surfl) / self.size
+
+    if nvec[0] == -1:
       i = 0
-    elif abs(hit_point[0] - (self.center[0] + self.size/2)) < 0.0001:
-      nvec = np.array([1, 0, 0])
-      v = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
-      u = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+      u = temp[2]
+      v = temp[1]
+      basis = np.array([[0, 0, 1], [0, 1, 0], nvec])
+    elif nvec[0] == 1:
       i = 1
-    elif abs(hit_point[1] - (self.center[1] - self.size/2)) < 0.0001:
-      nvec = np.array([0, -1, 0])
-      u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
-      v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+      u = temp[2]
+      v = temp[1]
+      basis = np.array([[0, 0, 1], [0, 1, 0], nvec])
+    elif nvec[1] == -1:
       i = 2
-    elif abs(hit_point[1] - (self.center[1] + self.size/2)) < 0.0001:
-      nvec = np.array([0, 1, 0])
-      u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
-      v = (hit_point[2] - (self.center[2] - self.size/2)) / self.size
+      u = temp[0]
+      v = temp[2]
+      basis = np.array([[1, 0, 0], [0, 0, 1], nvec])
+    elif nvec[1] == 1:
       i = 3
-    elif abs(hit_point[2] - (self.center[2] - self.size/2)) < 0.0001:
-      nvec = np.array([0, 0, -1])
-      u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
-      v = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      u = temp[0]
+      v = temp[2]
+      basis = np.array([[1, 0, 0], [0, 0, 1], nvec])
+    elif nvec[2] == -1:
       i = 4
-    elif abs(hit_point[2] - (self.center[2] + self.size/2)) < 0.0001:
-      nvec = np.array([0, 0, 1])
-      u = (hit_point[0] - (self.center[0] - self.size/2)) / self.size
-      v = (hit_point[1] - (self.center[1] - self.size/2)) / self.size
+      u = temp[0]
+      v = temp[1]
+      basis = np.array([[1, 0, 0], [0, 1, 0], nvec])
+    elif nvec[2] == 1:
       i = 5
+      u = temp[0]
+      v = temp[1]
+      basis = np.array([[1, 0, 0], [0, 1, 0], nvec])
+
+    kd = np.zeros(3).astype(np.float32)
 
     if self.material.texture is not None:
       u, v = int(
@@ -242,13 +231,23 @@ class Cube:
       # clamp u,v
       u = np.clip(u, 0, self.material.texture[0].shape[1]-1)
       v = np.clip(v, 0, self.material.texture[0].shape[0]-1)
-      kd = self.material.texture[i][v, u]/255
+
+      kd = self.material.texture[int(i)][v, u]/255
     else:
       kd = self.material.k_d
 
+    # 3d normal map
+    if self.material.normal_map is not None:
+      normal = self.material.normal_map[int(i)][v, u]/255
+      if np.all(normal == 0) or np.all(normal == 1):
+        normal = np.array([0.5, 0.5, 1])
+      normal = normal*2-1
+      nvec = np.dot(basis, normal)
+      nvec = nvec/np.linalg.norm(nvec)
+
     mat = Material(kd, k_s=self.material.k_s,
                    p=self.material.p, k_m=self.material.k_m, k_a=self.material.k_a, texture=self.material.texture)
-    return Hit(tmin, hit_point, nvec, mat)
+    return Hit(t0, hit_point, nvec, mat)
 
 
 class Triangle:
@@ -504,17 +503,19 @@ def render_image(camera, scene, lights, nx, ny):
         # image[j, i] = shade(ray, scene.intersect(ray), scene, lights, MAX_DEPTH)
       if(i*ny+j) % 1000 == 0:
         print("Rendered: %f" % ((i*ny+j)/num_pixel), end="\r")
-      ray1 = camera.generate_ray(
-        [i / nx + offset_x - offset_x2, j / ny + offset_y - offset_y2])
-      ray2 = camera.generate_ray(
-        [i / nx + offset_x + offset_x2, j / ny + offset_y - offset_y2])
-      ray3 = camera.generate_ray(
-        [i / nx + offset_x - offset_x2, j / ny + offset_y + offset_y2])
-      ray4 = camera.generate_ray(
-        [i / nx + offset_x + offset_x2, j / ny + offset_y + offset_y2])
-      s1 = shade(ray1, scene.intersect(ray1), scene, lights, MAX_DEPTH)
-      s2 = shade(ray2, scene.intersect(ray2), scene, lights, MAX_DEPTH)
-      s3 = shade(ray3, scene.intersect(ray3), scene, lights, MAX_DEPTH)
-      s4 = shade(ray4, scene.intersect(ray4), scene, lights, MAX_DEPTH)
-      image[j, i] = (s1 + s2 + s3 + s4) / 4
+      ray = camera.generate_ray([i / nx + offset_x, j / ny + offset_y])
+      image[j, i] = shade(ray, scene.intersect(ray), scene, lights, MAX_DEPTH)
+      # ray1 = camera.generate_ray(
+      #   [i / nx + offset_x - offset_x2, j / ny + offset_y - offset_y2])
+      # ray2 = camera.generate_ray(
+      #   [i / nx + offset_x + offset_x2, j / ny + offset_y - offset_y2])
+      # ray3 = camera.generate_ray(
+      #   [i / nx + offset_x - offset_x2, j / ny + offset_y + offset_y2])
+      # ray4 = camera.generate_ray(
+      #   [i / nx + offset_x + offset_x2, j / ny + offset_y + offset_y2])
+      # s1 = shade(ray1, scene.intersect(ray1), scene, lights, MAX_DEPTH)
+      # s2 = shade(ray2, scene.intersect(ray2), scene, lights, MAX_DEPTH)
+      # s3 = shade(ray3, scene.intersect(ray3), scene, lights, MAX_DEPTH)
+      # s4 = shade(ray4, scene.intersect(ray4), scene, lights, MAX_DEPTH)
+      # image[j, i] = (s1 + s2 + s3 + s4) / 4
   return np.clip(image, 0, 1)
