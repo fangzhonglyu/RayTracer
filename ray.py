@@ -36,7 +36,7 @@ class Ray:
 
 class Material:
 
-  def __init__(self, k_d, k_s=0., p=20., k_m=0., k_a=None, texture=None, normal_map=None):
+  def __init__(self, k_d, k_s=0., p=20., k_m=0., k_a=None, texture=None, normal_map=None, s_map=None):
     """Create a new material with the given parameters.
 
     Parameters:
@@ -54,6 +54,7 @@ class Material:
     self.k_a = k_a if k_a is not None else k_d
     self.texture = texture
     self.normal_map = normal_map
+    self.s_map = s_map
 
 
 class Hit:
@@ -245,7 +246,12 @@ class Cube:
       nvec = np.dot(basis, normal)
       nvec = nvec/np.linalg.norm(nvec)
 
-    mat = Material(kd, k_s=self.material.k_s,
+    if self.material.s_map is not None:
+      ks = self.material.s_map[int(i)][v, u]/255
+    else:
+      ks = self.material.k_s
+
+    mat = Material(kd, k_s=ks,
                    p=self.material.p, k_m=self.material.k_m, k_a=self.material.k_a, texture=self.material.texture)
     return Hit(t0, hit_point, nvec, mat)
 
@@ -496,7 +502,6 @@ def render_image(camera, scene, lights, nx, ny):
   offset_x2 = offset_x / 2
   offset_y2 = offset_y / 2
   num_pixel = nx * ny
-
   for i in range(nx):
     for j in range(ny):
       # ray = camera.generate_ray([i / nx + offset_x, j / ny + offset_y])
